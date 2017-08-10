@@ -9,6 +9,7 @@ import patch_xml_kfb
 from skimage import color, measure,io
 from scipy.misc import imsave,imread
 from scipy import ndimage as nd
+import time
 
 class train_cut_test_conf():
     def __init__(self):
@@ -72,14 +73,15 @@ def file_loop():
     slide_stat_number = 0
 
     for file in files:
-        if (file == "2017-07-26 10_19_08.kfb"):
+        start = time.time()
+        if (file == "2017-07-24 17_03_29.kfb"):
             name = file
-            # out_xml = os.path.join(out_xml_base, "%s.xml" % name)
+            out_xml_one = os.path.join(out_xml_base, "%s.xml" % name)
             out_xml = os.path.join(out_xml_base, "%s.Ano" % name)
             # open slide
             slide = slide_open(os.path.join(file_path, file))
             mask_level = slide.level_count - 1 ###########mask_level
-            print("mask_level:%d"%mask_level)
+            # print("mask_level:%d"%mask_level)
             multiple_size = math.pow(2, mask_level)
             mask_tile_level_size = int(step / multiple_size)
 
@@ -93,11 +95,11 @@ def file_loop():
 
             #label mask
             mask_label = measure.label(slide_mask)
-            imsave("mask_label.bmp", mask_label)
+            # imsave("mask_label.bmp", mask_label)
             label_num = np.amax(mask_label)
-            print("label_mun : %d"%(label_num))
+            # print("label_mun : %d"%(label_num))
             properties = measure.regionprops(mask_label)
-            print("len:%d"%(len(properties)))
+            # print("len:%d"%(len(properties)))
 
             print("\n===== Cutting all patches =====")
 
@@ -110,17 +112,23 @@ def file_loop():
 
             test_center = []
 
-            for label in range(1,label_num):
+            for label in range(0,label_num):
                 center = properties[label].centroid#local centroid is relevante to region
                 center = [center[1],center[0]]
                 test_center.append(center)
                 area = properties[label].area
-                print("area:%f" % area)
+                # print("label_id:%d"%label)
+                # print("area:%f" % area)
 
-                xx_c = center[1] - 64 / multiple_size
-                yy_c = center[0] - 64 / multiple_size
-                print("center")
-                print(xx_c, yy_c)
+                xx_c = center[0] - 64 / multiple_size
+                yy_c = center[1] - 64 / multiple_size
+
+                if(xx_c < 0):
+                    xx_c = 0
+                if(yy_c < 0):
+                    yy_c = 0
+                # print("center")
+                # print(xx_c, yy_c)
 
                 if(area < 256):
                     xx_min = int(xx_c)
@@ -133,8 +141,8 @@ def file_loop():
                     xx_min = box[1]
                     yy_max = box[2]
                     xx_max = box[3]
-                    print("bbox")
-                    print(xx_min, yy_min, xx_max, yy_max)
+                    # print("bbox")
+                    # print(xx_min, yy_min, xx_max, yy_max)
 
                 for xx_t in range(xx_min, xx_max+1, mask_tile_level_size):
                     for yy_t in range(yy_min, yy_max+1, mask_tile_level_size):
@@ -143,9 +151,9 @@ def file_loop():
                         slide_mask_label = np.multiply(slide_mask, temp)
                         # imsave("slide_mask_label_%s.bmp"%label, slide_mask_label)
                         sum_t = slide_mask_label[yy_t:yy_t + mask_tile_level_size, xx_t:xx_t + mask_tile_level_size].sum()
-                        print("sum_t:%d" % sum_t)
-                        print("yy_t:%d"%yy_t)
-                        if sum_t > 256:  # patch valid in tissue mask
+                        # print("sum_t:%d" % sum_t)
+                        # print("yy_t:%d"%yy_t)
+                        if sum_t > 100:  # patch valid in tissue mask
                             if config.patch_stat_flag:
                                 x = int(xx_t * multiple_size + 8000)
                                 y = int(yy_t * multiple_size + 8000)
@@ -175,10 +183,13 @@ def file_loop():
             pre_ext.draw_point_in_image("./mask_fill_re.bmp", test_center,"center_point.bmp")
 
             if config.patch_stat_flag:
+                patch_xml.generate_xml_from_coords(patch_coords,out_xml_one, config.centre_size[0])
                 patch_xml_kfb.generate_xml_from_coords(patch_coords, out_xml, config.centre_size[0])
             all_patch_number += slide_stat_number
 
             print("===== all_patch_number: %d , ommited: %d=====" % (all_patch_number, all_patch_omitted_number))
+            end = time.time()
+            print("process:%s in %ss"%(file, end-start))
 
 if __name__ == "__main__":
     file_loop()

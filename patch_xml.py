@@ -11,9 +11,8 @@ def prettify(elem):
 def write_one_group_xml(Annotations, patches, name_head, color, tile_size):
     end = tile_size-1
     for i in range(len(patches)):
-        #y0,x0 = patches[i]*pow(2,m_level)
-        y0,x0 = patches[i]
-        y1,x1 = y0+end,x0+end
+        x0,y0 = patches[i]
+        x1,y1 = x0+end,y0+end
         anno = ET.SubElement(Annotations, "Annotation",Name=name_head+str(i),\
                         Type="Polygon",PartOfGroup=name_head, Color=color)
         coors = ET.SubElement(anno, "Coordinates")
