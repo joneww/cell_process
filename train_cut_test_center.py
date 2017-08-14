@@ -60,7 +60,6 @@ def file_loop():
     out_patch_base = config.out_patch_base
     out_xml_base = os.path.join(config.base, config.xml_base)
 
-    print("config:%s" % config.base)
     file_path = os.path.join(config.base, config.file_base)
     files = os.listdir(file_path)
 
@@ -81,26 +80,34 @@ def file_loop():
             # open slide
             slide = slide_open(os.path.join(file_path, file))
             mask_level = slide.level_count - 1 ###########mask_level
-            # print("mask_level:%d"%mask_level)
+            print("mask_level:%d"%mask_level)
             multiple_size = math.pow(2, mask_level)
             mask_tile_level_size = int(step / multiple_size)
-
+            print("mask_tile_level_size:%d" % mask_tile_level_size)
             # pre ground extract
-            # slide_dat = slide.read_region((0, 0), mask_level, slide.level_dimensions[mask_level])
-            slide_dat = slide.read_region((8000, 8000), mask_level, (500, 500))
+            slide_dat = slide.read_region((0, 0), mask_level, slide.level_dimensions[mask_level])
+            #slide_dat = slide.read_region((8000, 8000), mask_level, (500, 500))
             slide_dat = np.array(slide_dat)
             slide_dat = slide_dat[:, :, :3]
-            imsave("region.bmp", slide_dat)
+            #imsave("region.bmp", slide_dat)
+            time0 = time.time()
+            print("read slide process:%s in %ss" % (file, time0 - start))
+
             slide_mask = pre_ext.gen_crop_mask(slide_dat)
+
+            time1 = time.time()
+            print("preground process:%s in %ss" % (file, time1 - time0))
 
             #label mask
             mask_label = measure.label(slide_mask)
-            # imsave("mask_label.bmp", mask_label)
+            #imsave("mask_label.bmp", mask_label)
             label_num = np.amax(mask_label)
             # print("label_mun : %d"%(label_num))
             properties = measure.regionprops(mask_label)
             # print("len:%d"%(len(properties)))
 
+            time2 = time.time()
+            print("label process:%s in %ss" % (file, time2 - time1))
             print("\n===== Cutting all patches =====")
 
             dims_mask = slide.level_dimensions[mask_level]
@@ -115,7 +122,7 @@ def file_loop():
             for label in range(0,label_num):
                 center = properties[label].centroid#local centroid is relevante to region
                 center = [center[1],center[0]]
-                test_center.append(center)
+
                 area = properties[label].area
                 # print("label_id:%d"%label)
                 # print("area:%f" % area)
@@ -131,56 +138,105 @@ def file_loop():
                 # print(xx_c, yy_c)
 
                 if(area < 256):
+                    # print("label%d area is less than 256"%label)
+                    # print("xx_c,yy_c:%d,%d"%(xx_c,yy_c))
                     xx_min = int(xx_c)
-                    xx_max = int(xx_c)
+                    xx_max = int(xx_c + mask_tile_level_size)
                     yy_min = int(yy_c)
-                    yy_max = int(yy_c)
+                    yy_max = int(yy_c + mask_tile_level_size)
+                    if(xx_max > dims_mask[0]):
+                        xx_max = dims_mask[0]
+                    if(yy_max > dims_mask[1]):
+                        yy_max = dims_mask[1]
+
+                    # print("bbox")
+                    # print(xx_min, yy_min, xx_max, yy_max)
                 else:
                     box = properties[label].bbox
                     yy_min = box[0]
                     xx_min = box[1]
                     yy_max = box[2]
                     xx_max = box[3]
+                    # print("label%d area is large than 256"%label)
                     # print("bbox")
                     # print(xx_min, yy_min, xx_max, yy_max)
 
                 for xx_t in range(xx_min, xx_max+1, mask_tile_level_size):
                     for yy_t in range(yy_min, yy_max+1, mask_tile_level_size):
-                        temp = mask_label == (label+1)
-                        # imsave("temp%s.bmp" % label, temp)
-                        slide_mask_label = np.multiply(slide_mask, temp)
-                        # imsave("slide_mask_label_%s.bmp"%label, slide_mask_label)
-                        sum_t = slide_mask_label[yy_t:yy_t + mask_tile_level_size, xx_t:xx_t + mask_tile_level_size].sum()
+                        yy_r_min = yy_min - mask_tile_level_size
+                        if(yy_r_min < 0):
+                            yy_r_min = 0
+                            y_r = yy_t
+                        else:
+                            y_r = yy_t - yy_min + mask_tile_level_size
+
+                        yy_r_max = yy_max + mask_tile_level_size
+                        if (yy_r_max > dims_mask[1]):
+                            yy_r_max = dims_mask[1]
+
+                        xx_r_min = xx_min - mask_tile_level_size
+                        if(xx_r_min < 0):
+                            xx_r_min = 0
+                            x_r = xx_t
+                        else:
+                            x_r = xx_t - xx_min + mask_tile_level_size
+
+                        xx_r_max = xx_max + mask_tile_level_size
+                        if (xx_r_max > dims_mask[0]):
+                            xx_r_max = dims_mask[0]
+
+                        # print("region:")
+                        # print(xx_r_min, yy_r_min, xx_r_max, yy_r_max)
+                        mask_label_region = mask_label[yy_r_min:yy_r_max, xx_r_min:xx_r_max]
+                        mask_region = slide_mask[yy_r_min:yy_r_max, xx_r_min:xx_r_max]
+                        temp = mask_label_region == (label+1)
+                        # print np.shape(temp)
+                        #imsave("mask_label_region%s.bmp" % label, mask_label_region)
+
+                        region_mask_label = np.multiply(mask_region, temp)
+                        # print np.shape(slide_mask_label)
+                        #imsave("region_mask_label%s.bmp"%label, region_mask_label)
+
+
+                        #print("sum region:")
+                        # print(x_r, y_r, x_r + mask_tile_level_size, y_r + mask_tile_level_size)
+
+                        sum_t = region_mask_label[y_r:y_r + mask_tile_level_size, x_r:x_r + mask_tile_level_size].sum()
                         # print("sum_t:%d" % sum_t)
                         # print("yy_t:%d"%yy_t)
                         if sum_t > 100:  # patch valid in tissue mask
                             if config.patch_stat_flag:
-                                x = int(xx_t * multiple_size + 8000)
-                                y = int(yy_t * multiple_size + 8000)
-                                # print(x,y)
-                                # if (x - pixel_top_off_max) < 0 or (x + pixel_bot_off_max) > dims_file[0]:
-                                #     # print("[WARN1] patch with centre(%d,%d) cannot be cut by 299*299!" % (x, y))
-                                #     all_patch_omitted_number += 1
-                                #     continue
-                                # if (y - pixel_top_off_max) < 0 or (y + pixel_bot_off_max) > dims_file[1]:
-                                #     # print("[WARN2] patch with centre(%d,%d) cannot be cut by 299*299!" % (x, y))
-                                #     all_patch_omitted_number += 1
-                                #     continue
+
+                                test_center.append((xx_t,yy_t))
+                                # x = int(xx_t * multiple_size + 8000)
+                                # y = int(yy_t * multiple_size + 8000)
+                                x = int(xx_t * multiple_size)
+                                y = int(yy_t * multiple_size)
+                                if (x - pixel_top_off_max) < 0 or (x + pixel_bot_off_max) > dims_file[0]:
+                                    # print("[WARN1] patch with centre(%d,%d) cannot be cut by 299*299!" % (x, y))
+                                    all_patch_omitted_number += 1
+                                    continue
+                                if (y - pixel_top_off_max) < 0 or (y + pixel_bot_off_max) > dims_file[1]:
+                                    # print("[WARN2] patch with centre(%d,%d) cannot be cut by 299*299!" % (x, y))
+                                    all_patch_omitted_number += 1
+                                    continue
                                 slide_stat_number += 1
                                 patch_coords.append((x, y))
-                                # if config.patch_cut_flag:
-                                #     xx = x - pixel_solid_off
-                                #     yy = y - pixel_solid_off
-                                #     im_patch = slide.read_region((xx, yy), extract_level, patch_size)
-                                #
-                                #     out_name = out_patch_base + '%s_L00_X%06d_Y%06d_W%04d_H%04d.jpg' % (
-                                #         name, x, y, ww, hh)
-                                #     im_patch = im_patch.convert('RGB')
-                                #     im_patch.save(out_name)
+                                if config.patch_cut_flag:
+                                    xx = x - pixel_solid_off
+                                    yy = y - pixel_solid_off
+                                    im_patch = slide.read_region((xx, yy), extract_level, patch_size)
+
+                                    out_name = out_patch_base + '%s_L00_X%06d_Y%06d_W%04d_H%04d.jpg' % (
+                                        name, x, y, ww, hh)
+                                    im_patch = im_patch.convert('RGB')
+                                    im_patch.save(out_name)
                             else:
                                 slide_stat_number += 1
-
-            pre_ext.draw_point_in_image("./mask_fill_re.bmp", test_center,"center_point.bmp")
+                time3 = time.time()
+                #print("label %d process:%s in %ss" % (label, file, time3 - time2))
+                # pre_ext.draw_point_in_image("./mask_fill_re.bmp", test_center,"center_point.bmp")
+            # pre_ext.draw_rectangle_in_image("./mask_fill_re.bmp", test_center, "center_point.bmp")
 
             if config.patch_stat_flag:
                 patch_xml.generate_xml_from_coords(patch_coords,out_xml_one, config.centre_size[0])

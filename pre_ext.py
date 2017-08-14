@@ -10,10 +10,22 @@ def draw_point_in_image(image_name, points,new_image_name):
     image = Image.open(image_name)
     draw = ImageDraw.Draw(image)
     for n in range(len(points)):
-        ####plot region box in orig image####
+        ####plot point in orig image####
         draw.point(points[n], fill=0)
     image.save(new_image_name)
 
+
+def draw_rectangle_in_image(image_name, points, new_image_name):
+    image = Image.open(image_name)
+    draw = ImageDraw.Draw(image)
+    end = 32
+    for n in range(len(points)):
+        point = points[n]
+        x0,y0 = point[0],point[1]
+        x1,y1 = x0 + end,y0 + end
+        cor = [(x0,y0),(x1,y1)]
+        draw.rectangle(cor,fill=None,outline="blue")
+    image.save(new_image_name)
 
 def gen_crop_mask(image):
     '''
@@ -38,11 +50,11 @@ def gen_crop_mask(image):
     #change color space
     xyz_img_dat = color.rgb2xyz(image)
     #plot pic relevance
-    imsave("x_space.bmp",xyz_img_dat[:,:,0])
-    imsave("y_space.bmp",xyz_img_dat[:,:,1])
-    imsave("z_space.bmp",xyz_img_dat[:,:,2])
+    # imsave("x_space.bmp",xyz_img_dat[:,:,0])
+    # imsave("y_space.bmp",xyz_img_dat[:,:,1])
+    # imsave("z_space.bmp",xyz_img_dat[:,:,2])
 
-    np.save("xyz.npy", xyz_img_dat[:,:,2])
+    # np.save("xyz.npy", xyz_img_dat[:,:,2])
 
     mask = (xyz_img_dat[:,:,2] < 0.9)
     # mask = (hsv_img_dat[:, :, 1] > 0.2)
@@ -50,8 +62,8 @@ def gen_crop_mask(image):
     mask = mask.astype(np.int32)
 
     ##get central of label#####
-    imsave("mask1.bmp",mask)
-    print(np.shape(mask))
+    # imsave("mask1.bmp",mask)
+    # print(np.shape(mask))
 
     filled_image = nd.morphology.binary_fill_holes(mask)
     imsave("mask_fill.bmp", filled_image)
