@@ -10,6 +10,13 @@ from skimage import color, measure,io
 from scipy.misc import imsave,imread
 from scipy import ndimage as nd
 import time
+import sys
+my_lib_path ="/home1/zengwx/git_code/my_lib/"
+sys.path.append(my_lib_path)
+import log
+import logging
+import multiprocessing as mp
+import tensorflow as tf
 
 class train_cut_test_conf():
     def __init__(self):
@@ -46,7 +53,7 @@ def slide_open(filename):
     return slide
 
 
-def file_loop():
+def file_loop(thread_id, files):
     '''
     :file loop
     :return:
@@ -61,7 +68,6 @@ def file_loop():
     out_xml_base = os.path.join(config.base, config.xml_base)
 
     file_path = os.path.join(config.base, config.file_base)
-    files = os.listdir(file_path)
 
     pixel_top_off_max = (patch_size[0] - centre_size[0]) / 2
     pixel_bot_off_max = (patch_size[0] + centre_size[0]) / 2
@@ -73,7 +79,7 @@ def file_loop():
 
     for file in files:
         start = time.time()
-        if (file == "2017-07-24 17_03_29.kfb"):
+        if (file.endswith(".kfb")):
             name = file
             out_xml_one = os.path.join(out_xml_base, "%s.xml" % name)
             out_xml = os.path.join(out_xml_base, "%s.Ano" % name)
@@ -247,5 +253,28 @@ def file_loop():
             end = time.time()
             print("process:%s in %ss"%(file, end-start))
 
+
+def process_test():
+    config = train_cut_test_conf()
+    file_path = os.path.join(config.base, config.file_base)
+    files = os.listdir(file_path)
+
+
+    files = [file for file in files if file.endswith(".kfb")]
+    proc_num = 4
+    space = np.linspace(0, len(files), proc_num + 1).astype(np.int)
+
+    process = []
+    coord = tf.train.Coordinator()
+    for thread_id in range(proc_num):
+        f = files[space[thread_id]:space[thread_id + 1]]
+        args = (thread_id, f)
+        t = mp.Process(target=file_loop, args=args)
+        t.start()
+        process.append(t)
+
+    # Wait for all the threads to terminate.
+    coord.join(process)
+
 if __name__ == "__main__":
-    file_loop()
+    process_test()

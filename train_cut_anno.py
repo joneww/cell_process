@@ -3,6 +3,19 @@ import openslide
 import os
 import patch_xml
 import analy_anno
+import numpy as np
+import tensorflow as tf
+import threading
+import sys
+my_lib_path ="/home1/zengwx/git_code/my_lib/"
+sys.path.append(my_lib_path)
+import log
+import logging
+import multiprocessing as mp
+
+logger = logging.getLogger("lib_logger")
+max_group_num = 6
+group_name = ["asc-us", "lsil", "hsil", "scc", "ec", "mc"]
 
 class train_cut_anno_conf():
     def __init__(self):
@@ -64,11 +77,12 @@ def slide_open(filename):
 
     return slide
 
-def file_loop():
+def file_loop(thread_id, files):
     '''
     :file loop
     :return:
     '''
+    logger.debug("thread:%d"%thread_id)
     config = train_cut_anno_conf()
     extract_level = config.patch_extract_level
     patch_size = config.patch_size
@@ -76,9 +90,7 @@ def file_loop():
     out_patch_base = config.out_patch_base
     out_xml_base = os.path.join(config.base, config.xml_base)
 
-    print("config:%s"%config.base)
     file_path = os.path.join(config.base, config.file_base)
-    files = os.listdir(file_path)
 
     pixel_top_off_max = (patch_size[0] - centre_size[0]) / 2
     pixel_bot_off_max = (patch_size[0] + centre_size[0]) / 2
@@ -89,23 +101,12 @@ def file_loop():
     all_patch_omitted_number = 0
     slide_stat_number = 0
 
-    max_group_num = 6
-    group_name = ["asc-us", "lsil", "hsil", "scc", "ec", "mc"]
-
-    #create group for all slide patch
-    for i in range(0, max_group_num):
-        group_out_path = os.path.join(config.base, config.out_patch_base, group_name[i])
-        if(os.path.exists(group_out_path)):
-            print("group %s is exist"%group_name[i])
-        else:
-            os.makedirs(group_out_path)
-            print("group %s is not exist,and creat ok"%group_name[i])
-
     for file in files:
-        if(file == "2017-07-24 16_45_46.kfb"):
+        if(file.endswith(".kfb")):
             name = file
             out_xml = os.path.join(out_xml_base, "%s.xml" % name)
             # open slide
+            logger.debug("thread:%d, slide %s" %(thread_id, os.path.join(file_path, file)))
             slide = slide_open(os.path.join(file_path, file))
 
             # analy annotation
@@ -162,8 +163,66 @@ def file_loop():
 
             print("===== all_patch_number: %d , ommited: %d=====" % (all_patch_number, all_patch_omitted_number))
 
+def thread_test():#kfb read image .so not support
+    config = train_cut_anno_conf()
+    file_path = os.path.join(config.base, config.file_base)
+    files = os.listdir(file_path)
 
+    #create group for all slide patch
+    for i in range(0, max_group_num):
+        group_out_path = os.path.join(config.base, config.out_patch_base, group_name[i])
+        if(os.path.exists(group_out_path)):
+            print("group %s is exist"%group_name[i])
+        else:
+            os.makedirs(group_out_path)
+            print("group %s is not exist,and creat ok"%group_name[i])
+
+    files = [file for file in files if file.endswith(".kfb")]
+    thread_num = 1
+    space = np.linspace(0, len(files), thread_num + 1).astype(np.int)
+
+    threads = []
+    coord = tf.train.Coordinator()
+    for thread_id in range(thread_num):
+        f = files[space[thread_id]:space[thread_id + 1]]
+        args = (thread_id, f)
+        t = threading.Thread(target=file_loop, args=args)
+        t.start()
+        threads.append(t)
+
+    # Wait for all the threads to terminate.
+    coord.join(threads)
+
+def process_test():
+    config = train_cut_anno_conf()
+    file_path = os.path.join(config.base, config.file_base)
+    files = os.listdir(file_path)
+
+    #create group for all slide patch
+    for i in range(0, max_group_num):
+        group_out_path = os.path.join(config.base, config.out_patch_base, group_name[i])
+        if(os.path.exists(group_out_path)):
+            print("group %s is exist"%group_name[i])
+        else:
+            os.makedirs(group_out_path)
+            print("group %s is not exist,and creat ok"%group_name[i])
+
+    files = [file for file in files if file.endswith(".kfb")]
+    proc_num = 2
+    space = np.linspace(0, len(files), proc_num + 1).astype(np.int)
+
+    process = []
+    coord = tf.train.Coordinator()
+    for thread_id in range(proc_num):
+        f = files[space[thread_id]:space[thread_id + 1]]
+        args = (thread_id, f)
+        t = mp.Process(target=file_loop, args=args)
+        t.start()
+        process.append(t)
+
+    # Wait for all the threads to terminate.
+    coord.join(process)
 
 if __name__ == "__main__":
     dir_check()
-    file_loop()
+    process_test()
